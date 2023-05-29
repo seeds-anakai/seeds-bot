@@ -1,3 +1,6 @@
 {
-  "app": "yarn ts-node --prefer-ts-exts srv/app.ts"
+  "app": "yarn ts-node --prefer-ts-exts srv/app.ts",
+  "context": {
+    "@aws-cdk/aws-apigateway:disableCloudWatchRole": true
+  }
 }

@@ -1,0 +1,5 @@
+deeplake
+langchain
+openai
+slack_bolt
+tiktoken

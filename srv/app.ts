@@ -1,5 +1,13 @@
 // AWS CDK
-import { App, Stack, StackProps } from 'aws-cdk-lib';
+import {
+  App,
+  Duration,
+  Stack,
+  StackProps,
+  aws_apigateway as apigateway,
+  aws_lambda as lambda,
+  aws_s3 as s3,
+} from 'aws-cdk-lib';
 
 // Constructs
 import { Construct } from 'constructs';
@@ -19,6 +27,90 @@ class SlackGptStack extends Stack {
    */
   constructor(scope?: Construct, id?: string, props?: StackProps) {
     super(scope, id, props);
+
+    // Context Values
+    const [slackBotToken, slackSigningSecret, openaiApiKey] = [
+      this.node.getContext('slackBotToken'),
+      this.node.getContext('slackSigningSecret'),
+      this.node.getContext('openaiApiKey'),
+    ];
+
+    // Api Handler
+    const apiHandler = new lambda.DockerImageFunction(this, 'ApiHandler', {
+      code: lambda.DockerImageCode.fromImageAsset('src'),
+      architecture: lambda.Architecture.ARM_64,
+      timeout: Duration.minutes(15),
+      memorySize: 1769, // 1 vCPU
+      environment: {
+        SLACK_BOT_TOKEN: slackBotToken,
+        SLACK_SIGNING_SECRET: slackSigningSecret,
+        OPENAI_API_KEY: openaiApiKey,
+      },
+    });
+
+    // Api
+    const api = new apigateway.RestApi(this, 'Api', {
+      deployOptions: {
+        stageName: 'default',
+      },
+    });
+
+    // Add method to root resource.
+    api.root.addMethod('POST', new apigateway.LambdaIntegration(apiHandler, {
+      proxy: false,
+      passthroughBehavior: apigateway.PassthroughBehavior.WHEN_NO_TEMPLATES,
+      requestParameters: {
+        'integration.request.header.X-Amz-Invocation-Type': "'Event'",
+      },
+      requestTemplates: {
+        'application/json': `
+          #set($allParams = $input.params())
+          {
+            #set($params = $allParams.get('header'))
+            "headers": {
+              #foreach($paramName in $params.keySet())
+              "$paramName": "$util.escapeJavaScript($params.get($paramName))"
+              #if($foreach.hasNext),#end
+              #end
+            },
+            #set($params = $allParams.get('querystring'))
+            "queryStringParameters": {
+              #foreach($paramName in $params.keySet())
+              "$paramName": "$util.escapeJavaScript($params.get($paramName))"
+              #if($foreach.hasNext),#end
+              #end
+            },
+            "requestContext": {
+              "httpMethod": "$context.httpMethod"
+            },
+            "body": "$util.escapeJavaScript($input.body)",
+            "isBase64Encoded": false
+          }
+        `,
+      },
+      integrationResponses: [
+        {
+          statusCode: '200',
+        },
+      ],
+    }), {
+      methodResponses: [
+        {
+          statusCode: '200',
+        },
+      ],
+    });
+
+    // Vector Store
+    const vectorStore = new s3.Bucket(this, 'VectorStore', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    });
+
+    // Add environment variable for access Vector Store.
+    apiHandler.addEnvironment('VECTOR_STORE_BUCKET_NAME', vectorStore.bucketName);
+
+    // Add permissions to access Vector Store.
+    vectorStore.grantReadWrite(apiHandler);
   }
 }
 
