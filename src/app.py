@@ -15,17 +15,19 @@ app = App(
     token=os.environ['SLACK_BOT_TOKEN'],
 )
 
-# Chat OpenAI
+# LLM
 llm = ChatOpenAI(temperature=0, max_tokens=1024)
 
-# OpenAI Embeddings
-embeddings = OpenAIEmbeddings()
+# Vector Store
+db = DeepLake(
+    dataset_path='s3://{}/deeplake'.format(os.environ['VECTOR_STORE_BUCKET_NAME']),
+    embedding_function=OpenAIEmbeddings(),
+    read_only=True,
+    verbose=False,
+)
 
-# Deep Lake
-db = DeepLake(dataset_path='s3://{}/deeplake'.format(os.environ['VECTOR_STORE_BUCKET_NAME']), embedding_function=embeddings, read_only=True)
-
-# Retrieval Question/Answering
-chain = RetrievalQA.from_chain_type(llm=llm, chain_type='stuff', retriever=db.as_retriever())
+# QA Chain
+qa = RetrievalQA.from_chain_type(llm=llm, chain_type='stuff', retriever=db.as_retriever())
 
 # Lambda Handler
 def handler(event: dict, context: dict) -> Dict[str, Any]:
@@ -34,4 +36,4 @@ def handler(event: dict, context: dict) -> Dict[str, Any]:
 @app.event('app_mention')
 def handle_mentions(event: dict, client, say) -> None:
     thread_ts = event.get('thread_ts', event['ts'])
-    say(chain.run(event['text']), thread_ts=thread_ts)
+    say(qa.run(event['text']), thread_ts=thread_ts)
