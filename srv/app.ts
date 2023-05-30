@@ -5,6 +5,7 @@ import {
   Stack,
   StackProps,
   aws_apigateway as apigateway,
+  aws_dynamodb as dynamodb,
   aws_lambda as lambda,
   aws_s3 as s3,
 } from 'aws-cdk-lib';
@@ -100,6 +101,20 @@ class SlackGptStack extends Stack {
         },
       ],
     });
+
+    // Session Table
+    const sessionTable = new dynamodb.Table(this, 'SessionTable', {
+      partitionKey: {
+        name: 'SessionId',
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
+    // Add environment variable for access Session Table.
+    apiHandler.addEnvironment('SESSION_TABLE_NAME', sessionTable.tableName);
+
+    // Add permissions to access Session Table.
+    sessionTable.grantReadWriteData(apiHandler);
 
     // Vector Store
     const vectorStore = new s3.Bucket(this, 'VectorStore', {
