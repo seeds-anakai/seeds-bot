@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Any, Dict
 
 from langchain.chains import ConversationalRetrievalChain
@@ -58,8 +59,14 @@ def handle_mentions(event: dict, client, say) -> None:
         get_chat_history=lambda h: h,
     )
 
-    # Generate and answer.
-    say(qa({'question': event['text']})['answer'], thread_ts=thread_ts)
+    # Message
+    message = re.sub('<@[0-9A-Z]{11}>\s*', '', event['text'])
+
+    # Generate answer.
+    answer = qa({'question': message})['answer']
+
+    # Say.
+    say(answer, thread_ts=thread_ts)
 
     # Remove emoji of thinking face.
     client.reactions_remove(
