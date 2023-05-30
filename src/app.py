@@ -34,7 +34,14 @@ def handler(event: dict, context: dict) -> Dict[str, Any]:
 
 @app.event('app_mention')
 def handle_mentions(event: dict, client, say) -> None:
-    # thread_ts
+    # Add emoji of thinking face.
+    client.reactions_add(
+        channel=event['channel'],
+        name='thinking_face',
+        timestamp=event['ts'],
+    )
+
+    # Thread Timestamp
     thread_ts = event.get('thread_ts', event['ts'])
 
     # History
@@ -51,5 +58,12 @@ def handle_mentions(event: dict, client, say) -> None:
         get_chat_history=lambda h: h,
     )
 
-    # Say
+    # Generate and answer.
     say(qa({'question': event['text']})['answer'], thread_ts=thread_ts)
+
+    # Remove emoji of thinking face.
+    client.reactions_remove(
+        channel=event['channel'],
+        name='thinking_face',
+        timestamp=event['ts'],
+    )
