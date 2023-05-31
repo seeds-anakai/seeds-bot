@@ -1,6 +1,7 @@
 // AWS CDK
 import {
   App,
+  CfnOutput,
   Duration,
   Stack,
   StackProps,
@@ -51,6 +52,7 @@ class SlackGptStack extends Stack {
 
     // Api
     const api = new apigateway.RestApi(this, 'Api', {
+      restApiName: 'Slack GPT API',
       deployOptions: {
         stageName: 'default',
       },
@@ -100,6 +102,14 @@ class SlackGptStack extends Stack {
           statusCode: '200',
         },
       ],
+    });
+
+    // Remove the default endpoint output.
+    api.node.tryRemoveChild('Endpoint');
+
+    // Api Endpoint
+    new CfnOutput(this, 'ApiEndpoint', {
+      value: api.url.replace(/\/$/, ''),
     });
 
     // Session Table
