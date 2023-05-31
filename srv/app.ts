@@ -6,7 +6,9 @@ import {
   Stack,
   StackProps,
   aws_apigateway as apigateway,
+  aws_codebuild as codebuild,
   aws_dynamodb as dynamodb,
+  aws_iam as iam,
   aws_lambda as lambda,
   aws_s3 as s3,
 } from 'aws-cdk-lib';
@@ -136,6 +138,40 @@ class SlackGptStack extends Stack {
 
     // Add permissions to access Vector Store.
     vectorStore.grantReadWrite(apiHandler);
+
+    // App Build Project
+    const appBuildProject = new codebuild.Project(this, 'AppBuildProject', {
+      environment: {
+        buildImage: codebuild.LinuxArmBuildImage.AMAZON_LINUX_2_STANDARD_3_0,
+        privileged: true,
+      },
+      buildSpec: codebuild.BuildSpec.fromObject({
+        version: '0.2',
+        phases: {
+          install: {
+            'runtime-versions': {
+              nodejs: 'latest',
+            },
+            commands: [
+              'npm install -g yarn',
+            ],
+          },
+          pre_build: {
+            commands: [
+              'yarn --frozen-lockfile',
+            ],
+          },
+          build: {
+            commands: [
+              'yarn cdk deploy -c slackBotToken=${SLACK_BOT_TOKEN} -c slackSigningSecret=${SLACK_SIGNING_SECRET} -c openaiApiKey=${OPENAI_API_KEY} --require-approval never',
+            ],
+          },
+        },
+      }),
+    });
+
+    // Add administrator access policy.
+    appBuildProject.role?.addManagedPolicy?.(iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess'));
   }
 }
 
