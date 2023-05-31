@@ -10,13 +10,18 @@ from langchain.memory.chat_message_histories import DynamoDBChatMessageHistory
 from langchain.vectorstores import DeepLake
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
+from slack_bolt.context.say.say import Say
+from slack_sdk.web.client import WebClient
 
-# Slack
+# Slack App
 app = App(
     process_before_response=True,
     signing_secret=os.environ['SLACK_SIGNING_SECRET'],
     token=os.environ['SLACK_BOT_TOKEN'],
 )
+
+# Slack Request Handler
+slack_request_handler = SlackRequestHandler(app)
 
 # LLM
 llm = ChatOpenAI(temperature=0, max_tokens=1024)
@@ -30,11 +35,12 @@ db = DeepLake(
 )
 
 # Lambda Handler
-def handler(event: dict, context: dict) -> Dict[str, Any]:
-    return SlackRequestHandler(app).handle(event, context)
+def handler(event: Any, context: Any) -> Dict[str, Any]:
+    return slack_request_handler.handle(event, context)
 
+# Slack App Mention Handler
 @app.event('app_mention')
-def handle_mentions(event: dict, client, say) -> None:
+def handler_app_mention(event: Dict[str, Any], client: WebClient, say: Say) -> None:
     # Add emoji of thinking face.
     client.reactions_add(
         channel=event['channel'],
@@ -52,7 +58,7 @@ def handle_mentions(event: dict, client, say) -> None:
     memory = ConversationBufferMemory(memory_key='chat_history', chat_memory=history)
 
     # Chain
-    qa = ConversationalRetrievalChain.from_llm(
+    chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=db.as_retriever(),
         memory=memory,
@@ -63,7 +69,7 @@ def handle_mentions(event: dict, client, say) -> None:
     message = re.sub('<@[0-9A-Z]{11}>\s*', '', event['text'])
 
     # Generate answer.
-    answer = qa({'question': message})['answer']
+    answer = chain({'question': message})['answer']
 
     # Say.
     say(answer, thread_ts=thread_ts)
