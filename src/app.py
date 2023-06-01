@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
@@ -38,6 +38,7 @@ def handler_app_mention(event: Dict[str, Any], client: WebClient, say: Say) -> N
         text=event['text'],
         ts=event['ts'],
         thread_ts=event.get('thread_ts', event['ts']),
+        blocks=event['blocks'],
         client=client,
         say=say,
     )
@@ -50,12 +51,13 @@ def handler_message(event: Dict[str, Any], client: WebClient, say: Say) -> None:
         text=event['text'],
         ts=event['ts'],
         thread_ts=event.get('thread_ts', event['ts']),
+        blocks=event['blocks'],
         client=client,
         say=say,
     )
 
 # Answer
-def answer(channel: str, text: str, ts: str, thread_ts: str, client: WebClient, say: Say) -> None:
+def answer(channel: str, text: str, ts: str, thread_ts: str, blocks: List[Dict[str, Any]], client: WebClient, say: Say) -> None:
     global db
 
     # Add emoji of thinking face.
@@ -88,11 +90,8 @@ def answer(channel: str, text: str, ts: str, thread_ts: str, client: WebClient, 
         get_chat_history=lambda h: h,
     )
 
-    # Question
-    question = re.sub('<@[0-9A-Z]{11}>\s*', '', text)
-
     # Generate answer.
-    answer = chain({'question': question})['answer']
+    answer = chain({'question': normalize(text, blocks)})['answer']
 
     # Say answer in thread.
     say(answer, thread_ts=thread_ts)
@@ -103,3 +102,25 @@ def answer(channel: str, text: str, ts: str, thread_ts: str, client: WebClient, 
         name='thinking_face',
         timestamp=ts,
     )
+
+# Normalize Text
+def normalize(text: str, blocks: List[Dict[str, Any]]) -> str:
+    for block in blocks:
+        # Elements
+        if 'elements' in block and block['elements']:
+            text = normalize(text, block['elements'])
+
+        # Broadcast
+        if block['type'] == 'broadcast' and 'range' in block and block['range']:
+            text = text.replace('<!{}>'.format(block['range']), '')
+
+        # Channel
+        if block['type'] == 'channel' and 'channel_id' in block and block['channel_id']:
+            text = re.sub('<#{}|.*?>'.format(block['channel_id']), '', text)
+
+        # User
+        if block['type'] == 'user' and 'user_id' in block and block['user_id']:
+            text = text.replace('<@{}>'.format(block['user_id']), '')
+
+    # Normalized Text
+    return text.strip()
