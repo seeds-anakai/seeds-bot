@@ -8,6 +8,7 @@ import {
   aws_apigateway as apigateway,
   aws_codebuild as codebuild,
   aws_dynamodb as dynamodb,
+  aws_ecr_assets as ecr_assets,
   aws_iam as iam,
   aws_lambda as lambda,
   aws_s3 as s3,
@@ -41,7 +42,9 @@ class SlackGptStack extends Stack {
 
     // Api Handler
     const apiHandler = new lambda.DockerImageFunction(this, 'ApiHandler', {
-      code: lambda.DockerImageCode.fromImageAsset('src'),
+      code: lambda.DockerImageCode.fromImageAsset('src', {
+        platform: ecr_assets.Platform.LINUX_ARM64,
+      }),
       architecture: lambda.Architecture.ARM_64,
       timeout: Duration.minutes(15),
       memorySize: 1769, // 1 vCPU
