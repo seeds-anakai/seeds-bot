@@ -26,14 +26,6 @@ slack_request_handler = SlackRequestHandler(app)
 # LLM
 llm = ChatOpenAI(temperature=0, max_tokens=1024)
 
-# Vector Store
-db = DeepLake(
-    dataset_path='s3://{}/deeplake'.format(os.environ['VECTOR_STORE_BUCKET_NAME']),
-    embedding_function=OpenAIEmbeddings(),
-    read_only=True,
-    verbose=False,
-)
-
 # Lambda Handler
 def handler(event: Any, context: Any) -> Dict[str, Any]:
     return slack_request_handler.handle(event, context)
@@ -64,12 +56,23 @@ def handler_message(event: Dict[str, Any], client: WebClient, say: Say) -> None:
 
 # Answer
 def answer(channel: str, text: str, ts: str, thread_ts: str, client: WebClient, say: Say) -> None:
+    global db
+
     # Add emoji of thinking face.
     client.reactions_add(
         channel=channel,
         name='thinking_face',
         timestamp=ts,
     )
+
+    # Vector Store
+    if 'db' not in globals():
+        db = DeepLake(
+            dataset_path='s3://{}/deeplake'.format(os.environ['VECTOR_STORE_BUCKET_NAME']),
+            embedding_function=OpenAIEmbeddings(),
+            read_only=True,
+            verbose=False,
+        )
 
     # History
     history = DynamoDBChatMessageHistory(os.environ['SESSION_TABLE_NAME'], thread_ts)
