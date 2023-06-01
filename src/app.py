@@ -41,15 +41,35 @@ def handler(event: Any, context: Any) -> Dict[str, Any]:
 # Slack App Mention Handler
 @app.event('app_mention')
 def handler_app_mention(event: Dict[str, Any], client: WebClient, say: Say) -> None:
-    # Add emoji of thinking face.
-    client.reactions_add(
+    answer(
         channel=event['channel'],
-        name='thinking_face',
-        timestamp=event['ts'],
+        text=event['text'],
+        ts=event['ts'],
+        thread_ts=event.get('thread_ts', event['ts']),
+        client=client,
+        say=say,
     )
 
-    # Thread Timestamp
-    thread_ts = event.get('thread_ts', event['ts'])
+# Slack Message Handler
+@app.event('message')
+def handler_message(event: Dict[str, Any], client: WebClient, say: Say) -> None:
+    answer(
+        channel=event['channel'],
+        text=event['text'],
+        ts=event['ts'],
+        thread_ts=event.get('thread_ts', event['ts']),
+        client=client,
+        say=say,
+    )
+
+# Answer
+def answer(channel: str, text: str, ts: str, thread_ts: str, client: WebClient, say: Say) -> None:
+    # Add emoji of thinking face.
+    client.reactions_add(
+        channel=channel,
+        name='thinking_face',
+        timestamp=ts,
+    )
 
     # History
     history = DynamoDBChatMessageHistory(os.environ['SESSION_TABLE_NAME'], thread_ts)
@@ -65,18 +85,18 @@ def handler_app_mention(event: Dict[str, Any], client: WebClient, say: Say) -> N
         get_chat_history=lambda h: h,
     )
 
-    # Message
-    message = re.sub('<@[0-9A-Z]{11}>\s*', '', event['text'])
+    # Question
+    question = re.sub('<@[0-9A-Z]{11}>\s*', '', text)
 
     # Generate answer.
-    answer = chain({'question': message})['answer']
+    answer = chain({'question': question})['answer']
 
-    # Say.
+    # Say answer in thread.
     say(answer, thread_ts=thread_ts)
 
     # Remove emoji of thinking face.
     client.reactions_remove(
-        channel=event['channel'],
+        channel=channel,
         name='thinking_face',
-        timestamp=event['ts'],
+        timestamp=ts,
     )
