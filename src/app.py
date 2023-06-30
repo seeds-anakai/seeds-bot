@@ -24,7 +24,11 @@ app = App(
 slack_request_handler = SlackRequestHandler(app)
 
 # LLM
-llm = ChatOpenAI(temperature=0, max_tokens=1024)
+llm = ChatOpenAI(
+    temperature=0,
+    openai_organization=os.environ['OPENAI_ORGANIZATION'],
+    max_tokens=1024,
+)
 
 # Lambda Handler
 def handler(event: Any, context: Any) -> Dict[str, Any]:

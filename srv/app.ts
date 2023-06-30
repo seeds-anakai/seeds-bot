@@ -34,10 +34,11 @@ class SlackGptStack extends Stack {
     super(scope, id, props);
 
     // Context Values
-    const [slackBotToken, slackSigningSecret, openaiApiKey] = [
+    const [slackBotToken, slackSigningSecret, openaiApiKey, openaiOrganization] = [
       this.node.getContext('slackBotToken'),
       this.node.getContext('slackSigningSecret'),
       this.node.getContext('openaiApiKey'),
+      this.node.getContext('openaiOrganization'),
     ];
 
     // Api Handler
@@ -52,6 +53,7 @@ class SlackGptStack extends Stack {
         SLACK_BOT_TOKEN: slackBotToken,
         SLACK_SIGNING_SECRET: slackSigningSecret,
         OPENAI_API_KEY: openaiApiKey,
+        OPENAI_ORGANIZATION: openaiOrganization,
       },
     });
 
@@ -166,7 +168,7 @@ class SlackGptStack extends Stack {
           },
           build: {
             commands: [
-              'yarn cdk deploy -c slackBotToken=${SLACK_BOT_TOKEN} -c slackSigningSecret=${SLACK_SIGNING_SECRET} -c openaiApiKey=${OPENAI_API_KEY} --require-approval never',
+              'yarn cdk deploy -c slackBotToken=${SLACK_BOT_TOKEN} -c slackSigningSecret=${SLACK_SIGNING_SECRET} -c openaiApiKey=${OPENAI_API_KEY} -c openaiOrganization=${OPENAI_ORGANIZATION} --require-approval never',
             ],
           },
         },
