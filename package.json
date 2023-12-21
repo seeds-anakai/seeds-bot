@@ -1,11 +1,15 @@
 {
   "devDependencies": {
-    "@types/node": "^20.3.2",
-    "aws-cdk": "^2.86.0",
-    "aws-cdk-lib": "^2.86.0",
-    "constructs": "^10.2.64",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.1.6"
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.478.0",
+    "@aws-sdk/client-dynamodb": "^3.478.0",
+    "@aws-sdk/lib-dynamodb": "^3.478.0",
+    "@slack/bolt": "^3.17.0",
+    "@types/node": "^20.10.5",
+    "aws-cdk": "^2.115.0",
+    "aws-cdk-lib": "^2.115.0",
+    "constructs": "^10.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   },
   "license": "UNLICENSED",
   "private": true

@@ -1,5 +1,5 @@
-# Slack GPT
+# Seeds Bot
 
-[![deploy](https://github.com/seeds-anakai/slack-gpt/actions/workflows/deploy.yml/badge.svg)](https://github.com/seeds-anakai/slack-gpt/actions/workflows/deploy.yml)
+[![deploy](https://github.com/seeds-anakai/seeds-bot/actions/workflows/deploy.yml/badge.svg)](https://github.com/seeds-anakai/seeds-bot/actions/workflows/deploy.yml)
 
-Slack GPT is a Slackbot that uses ChatGPT to answer.
+Seeds Bot is a Slackbot that uses Amazon Bedrock to answer.
