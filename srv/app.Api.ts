@@ -79,7 +79,7 @@ app.event('message', async ({ client, event, say }) => {
 });
 
 // Answer
-const answer = async (client: WebClient, channel: string, ts: string, threadTs: string, text: string, say: SayFn) => {
+const answer = async (client: WebClient, channel: string, ts: string, threadTs: string, text: string, say: SayFn): Promise<void> => {
   // Thread ID
   const threadId = `${channel}#${threadTs}`;
 
@@ -126,7 +126,9 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
 };
 
 // Normalize
-const normalize = (text: string) => text.replace(/<[!#@].*?>/g, '').trim();
+const normalize = (text: string): string => {
+  return text.replace(/<[!#@].*?>\s*/g, '');
+};
 
 // Get Session ID
 const getSessionId = async (threadId: string): Promise<string | undefined> => {
