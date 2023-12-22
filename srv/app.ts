@@ -128,7 +128,5 @@ class SeedsBotStack extends Stack {
 
 const app = new App();
 new SeedsBotStack(app, 'SeedsBot', {
-  env: {
-    region: 'us-east-1',
-  },
+  env: { region: 'us-east-1' },
 });

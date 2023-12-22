@@ -59,7 +59,7 @@ app.event('app_mention', async ({ client, event, say }) => {
     event.channel,
     event.ts,
     event.thread_ts ?? event.ts,
-    event.text,
+    normalize(event.text),
     say,
   );
 });
@@ -72,14 +72,14 @@ app.event('message', async ({ client, event, say }) => {
       event.channel,
       event.ts,
       event.thread_ts ?? event.ts,
-      event.text,
+      normalize(event.text),
       say,
     );
   }
 });
 
 // Answer
-const answer = async (client: WebClient, channel: string, ts: string, threadTs: string, text: string, say: SayFn): Promise<void> => {
+const answer = async (client: WebClient, channel: string, ts: string, threadTs: string, text: string, say: SayFn) => {
   // Thread ID
   const threadId = `${channel}#${threadTs}`;
 
@@ -108,7 +108,7 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
   // Say answer in thread.
   await say({ text: output?.text, thread_ts: threadTs });
 
-  // Save Session ID.
+  // Save session id.
   await dynamodb.send(new PutCommand({
     TableName: sessionTableName,
     Item: {
@@ -124,6 +124,9 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
     timestamp: ts,
   });
 };
+
+// Normalize
+const normalize = (text: string) => text.replace(/<[!#@].*?>/g, '').trim();
 
 // Get Session ID
 const getSessionId = async (threadId: string): Promise<string | undefined> => {
