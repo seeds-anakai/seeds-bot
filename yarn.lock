@@ -1289,9 +1289,9 @@
   integrity sha512-wA0UT0HeT2fGHzIFV9kWpYz5mdoyLxKrTgMdZQM++5h6pYAFH73HXcQhefg24nD1yivUFEn5KU+EF4b+CXJ4Wg==
 
 "@types/qs@*":
-  version "6.9.10"
-  resolved "https://registry.yarnpkg.com/@types/qs/-/qs-6.9.10.tgz#0af26845b5067e1c9a622658a51f60a3934d51e8"
-  integrity sha512-3Gnx08Ns1sEoCrWssEgTSJs/rsT2vhGP+Ja9cnnk9k4ALxinORlQneLXFeFKOTJMOeZUFD1s7w+w2AphTpvzZw==
+  version "6.9.11"
+  resolved "https://registry.yarnpkg.com/@types/qs/-/qs-6.9.11.tgz#208d8a30bc507bd82e03ada29e4732ea46a6bbda"
+  integrity sha512-oGk0gmhnEJK4Yyk+oI7EfXsLayXatCWPHary1MtcmbAifkobT9cM9yutG/hZKIseOU0MqbIwQ/u2nn/Gb+ltuQ==
 
 "@types/range-parser@*":
   version "1.2.7"
@@ -1429,10 +1429,10 @@ available-typed-arrays@^1.0.5:
   resolved "https://registry.yarnpkg.com/available-typed-arrays/-/available-typed-arrays-1.0.5.tgz#92f95616501069d07d10edb2fc37d3e1c65123b7"
   integrity sha512-DMD0KiN46eipeziST1LPP/STfDU0sufISXmjSgvVsoU2tqxctQeASejWcfNtxYKqETM1UxQ8sp2OrSBWpHY6sw==
 
-aws-cdk-lib@^2.115.0:
-  version "2.115.0"
-  resolved "https://registry.yarnpkg.com/aws-cdk-lib/-/aws-cdk-lib-2.115.0.tgz#6f0b9b303c334d233b670ca145894c30b1bf1f52"
-  integrity sha512-PGIwmjo9BcviKxuMfMlUCwevUjwXnaS5h8fxZOM6bN1HXCS/wIusft4tMmkiNYjPiNE1sHJbCDIbxxntCQ/7jg==
+aws-cdk-lib@^2.116.0:
+  version "2.116.0"
+  resolved "https://registry.yarnpkg.com/aws-cdk-lib/-/aws-cdk-lib-2.116.0.tgz#070d130059c10dbde4e3b484096b2a5f73405755"
+  integrity sha512-LOYJGtKLvf/wVt3UMwWQxvxgAM681ZV/BbGGB6aEqc7+4TMfbYFbaA02+zwN0E0zxOxi4l0j1/BNO4GOzVSoPw==
   dependencies:
     "@aws-cdk/asset-awscli-v1" "^2.2.201"
     "@aws-cdk/asset-kubectl-v20" "^2.1.2"
@@ -1448,10 +1448,10 @@ aws-cdk-lib@^2.115.0:
     table "^6.8.1"
     yaml "1.10.2"
 
-aws-cdk@^2.115.0:
-  version "2.115.0"
-  resolved "https://registry.yarnpkg.com/aws-cdk/-/aws-cdk-2.115.0.tgz#a838f4edb6ba2b7c9dff99df4990f7c0e99aea3d"
-  integrity sha512-jf+5j+ygk/DqxLzYyjFnCOOlRgvL/fwcYhyanhpb1OEQEe1FF6NGUb1TYsnQc3Ly67qLOKkQgdeyeXgzkKoSOQ==
+aws-cdk@^2.116.0:
+  version "2.116.0"
+  resolved "https://registry.yarnpkg.com/aws-cdk/-/aws-cdk-2.116.0.tgz#c77a5a635a1470b562f416947034ccd96786dd7e"
+  integrity sha512-Vhy0rxund2kLQekMZodGvhqh5qnNSLl+Y/qjx6Zr2pr36xHvT5Tn1sqatmPoj05sQVypikg9Dteg+SUiVOrWfA==
   optionalDependencies:
     fsevents "2.3.2"
 
