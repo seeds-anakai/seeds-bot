@@ -258,18 +258,20 @@ const getReference = async (messageId: string, no: number): Promise<RetrievedRef
 
 // Put References
 const putReferences = async (messageId: string, references: RetrievedReference[]): Promise<void> => {
-  await dynamodb.send(new BatchWriteCommand({
-    RequestItems: {
-      [referenceTableName]: references.map((reference, i) => ({
-        PutRequest: {
-          Item: {
-            messageId,
-            no: i + 1,
-            reference,
+  await Promise.all([...Array(Math.ceil(references.length / 25)).keys()].map((i) => references.slice(i * 25, (i + 1) * 25)).map((references, i) => {
+    return dynamodb.send(new BatchWriteCommand({
+      RequestItems: {
+        [referenceTableName]: references.map((reference, j) => ({
+          PutRequest: {
+            Item: {
+              messageId,
+              no: i * 25 + j + 1,
+              reference,
+            },
           },
-        },
-      })),
-    },
+        })),
+      },
+    }));
   }));
 };
 
