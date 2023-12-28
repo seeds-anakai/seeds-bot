@@ -28,5 +28,7 @@ jobs:
             -c slackBotToken=${{ secrets.SLACK_BOT_TOKEN }} \
             -c slackSigningSecret=${{ secrets.SLACK_SIGNING_SECRET }} \
             -c knowledgeBaseId=${{ secrets.KNOWLEDGE_BASE_ID }} \
+            -c dataSourceId=${{ secrets.DATA_SOURCE_ID }} \
+            -c dataSourceBucketName=${{ secrets.DATA_SOURCE_BUCKET_NAME }} \
             -c githubRepo=${{ github.repository }} \
             --require-approval never

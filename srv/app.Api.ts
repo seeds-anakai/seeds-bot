@@ -1,3 +1,11 @@
+// AWS SDK - Bedrock Agent
+import {
+  BedrockAgentClient,
+  GetIngestionJobCommand,
+  IngestionJobStatus,
+  StartIngestionJobCommand,
+} from '@aws-sdk/client-bedrock-agent';
+
 // AWS SDK - Bedrock Agent Runtime
 import {
   BedrockAgentRuntimeClient,
@@ -17,11 +25,20 @@ import {
   PutCommand,
 } from '@aws-sdk/lib-dynamodb';
 
+// AWS SDK - S3
+import {
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+
 // Slack - Bolt
 import {
+  AllMiddlewareArgs,
   App,
+  AppMentionEvent,
   AwsLambdaReceiver,
   BlockElementAction,
+  GenericMessageEvent,
   KnownBlock,
 } from '@slack/bolt';
 
@@ -29,17 +46,24 @@ import {
 import { WebClient } from '@slack/web-api';
 
 // Environment Variables
-const [slackBotToken, slackSigningSecret, knowledgeBaseId, sessionTableName, referenceTableName, modelArn] = [
+const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, sessionTableName, referenceTableName, modelArn] = [
   process.env.SLACK_BOT_TOKEN,
   process.env.SLACK_SIGNING_SECRET,
   process.env.KNOWLEDGE_BASE_ID,
+  process.env.DATA_SOURCE_ID,
+  process.env.DATA_SOURCE_BUCKET_NAME,
   process.env.SESSION_TABLE_NAME,
   process.env.REFERENCE_TABLE_NAME,
   'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
 ];
 
+// AWS SDK - Bedrock Agent - Client
+const bedrockAgent = new BedrockAgentClient({
+  apiVersion: '2023-06-05',
+});
+
 // AWS SDK - Bedrock Agent Runtime - Client
-const bedrock = new BedrockAgentRuntimeClient({
+const bedrockAgentRuntime = new BedrockAgentRuntimeClient({
   apiVersion: '2023-07-26',
 });
 
@@ -47,6 +71,11 @@ const bedrock = new BedrockAgentRuntimeClient({
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({
   apiVersion: '2012-08-10',
 }));
+
+// AWS SDK - S3 - Client
+const s3 = new S3Client({
+  apiVersion: '2006-03-01',
+});
 
 // Slack - AWS Lambda Receiver
 const receiver = new AwsLambdaReceiver({
@@ -57,27 +86,57 @@ const receiver = new AwsLambdaReceiver({
 const app = new App({ token: slackBotToken, receiver });
 
 // Slack - App Mention Event Handler
-app.event('app_mention', async ({ client, event }) => {
+app.event('app_mention', async ({ client, event }: { event: AppMentionEvent & Pick<GenericMessageEvent, 'files'> } & AllMiddlewareArgs) => {
   if (!event.subtype) {
-    await answer(
-      client,
-      event.channel,
-      event.ts,
-      event.thread_ts ?? event.ts,
-      normalize(event.text),
-    );
+    if (!event.files) {
+      await answer(
+        client,
+        event.channel,
+        event.ts,
+        event.thread_ts ?? event.ts,
+        normalize(event.text),
+      );
+    } else {
+      await uploadFilesAndSync(
+        client,
+        event.channel,
+        event.ts,
+        event.thread_ts ?? event.ts,
+        event.files,
+      );
+    }
   }
 });
 
 // Slack - Direct Message Handler
 app.message(async ({ client, event }) => {
-  if (!event.subtype && event.text) {
-    await answer(
+  if (!event.subtype) {
+    if (!event.files) {
+      await answer(
+        client,
+        event.channel,
+        event.ts,
+        event.thread_ts ?? event.ts,
+        normalize(event.text ?? ''),
+      );
+    } else {
+      await uploadFilesAndSync(
+        client,
+        event.channel,
+        event.ts,
+        event.thread_ts ?? event.ts,
+        event.files,
+      );
+    }
+  }
+
+  if (event.subtype === 'file_share' && event.files) {
+    await uploadFilesAndSync(
       client,
       event.channel,
       event.ts,
       event.thread_ts ?? event.ts,
-      normalize(event.text),
+      event.files,
     );
   }
 });
@@ -106,57 +165,129 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
     timestamp: ts,
   });
 
-  // Retrieve and generate.
-  const { sessionId, citations } = await bedrock.send(new RetrieveAndGenerateCommand({
-    sessionId: await getSessionId(channel, threadTs),
-    input: {
-      text,
-    },
-    retrieveAndGenerateConfiguration: {
-      type: RetrieveAndGenerateType.KNOWLEDGE_BASE,
-      knowledgeBaseConfiguration: {
-        knowledgeBaseId,
-        modelArn,
+  try {
+    // Retrieve and generate.
+    const { sessionId, citations } = await bedrockAgentRuntime.send(new RetrieveAndGenerateCommand({
+      sessionId: await getSessionId(channel, threadTs),
+      input: {
+        text,
       },
-    },
-  }));
+      retrieveAndGenerateConfiguration: {
+        type: RetrieveAndGenerateType.KNOWLEDGE_BASE,
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId,
+          modelArn,
+        },
+      },
+    }));
 
-  if (!sessionId || !citations) {
-    return;
-  }
+    if (!sessionId) {
+      throw Error('回答の生成に失敗しました。');
+    }
 
-  // References
-  const references = citations.flatMap(({ retrievedReferences }) => retrievedReferences ?? []);
+    if (!citations) {
+      throw Error('回答の生成に失敗しました。');
+    }
 
-  // Answer
-  const answer = citations.reduce((answer, { generatedResponsePart, retrievedReferences }) => {
-    // Add response text.
-    answer += generatedResponsePart?.textResponsePart?.text;
-
-    // Add reference numbers.
-    answer += retrievedReferences?.map?.((reference) => {
-      return `[${references.indexOf(reference) + 1}] `;
-    })?.join?.('');
+    // References
+    const references = citations.flatMap(({ retrievedReferences }) => retrievedReferences ?? []);
 
     // Answer
-    return answer;
-  }, '');
+    const answer = citations.reduce((answer, { generatedResponsePart, retrievedReferences }) => {
+      // Add response text.
+      answer += generatedResponsePart?.textResponsePart?.text;
 
-  // Post answer in thread.
-  const messageId = await postMessage(client, channel, threadTs, answer, references);
+      // Add reference numbers.
+      answer += retrievedReferences?.map?.((reference) => {
+        return `[${references.indexOf(reference) + 1}] `;
+      })?.join?.('');
 
-  // Put session id.
-  await putSessionId(channel, threadTs, sessionId);
+      // Answer
+      return answer;
+    }, '');
 
-  // Put references.
-  await putReferences(messageId, references);
+    // Post message in thread.
+    const messageId = await postMessage(client, channel, threadTs, answer, references);
 
-  // Remove emoji of thinking face.
-  await client.reactions.remove({
-    name: 'thinking_face',
+    // Put session id.
+    await putSessionId(channel, threadTs, sessionId);
+
+    // Put references.
+    await putReferences(messageId, references);
+  } catch (e: any) {
+    // Post error message in thread.
+    await postMessage(client, channel, threadTs, e.message);
+  } finally {
+    // Remove emoji of thinking face.
+    await client.reactions.remove({
+      name: 'thinking_face',
+      channel,
+      timestamp: ts,
+    });
+  }
+};
+
+// Upload Files and Sync
+const uploadFilesAndSync = async (client: WebClient, channel: string, ts: string, threadTs: string, files: NonNullable<GenericMessageEvent['files']>): Promise<void> => {
+  // Add emoji of saluting face.
+  await client.reactions.add({
+    name: 'saluting_face',
     channel,
     timestamp: ts,
   });
+
+  try {
+    // Put files.
+    await putFiles(files);
+
+    // Start ingestion job.
+    const ingestionJobId = await startIngestionJob(
+      knowledgeBaseId,
+      dataSourceId,
+    );
+
+    if (!ingestionJobId) {
+      throw Error('データの取り込みに失敗しました。');
+    }
+
+    while (true) {
+      // Get ingestion job status.
+      const status = await getIngestionJobStatus(
+        knowledgeBaseId,
+        dataSourceId,
+        ingestionJobId,
+      );
+
+      if (!status) {
+        throw Error('データの取り込みに失敗しました。');
+      }
+
+      if (status === 'FAILED') {
+        throw Error('データの取り込みに失敗しました。');
+      }
+
+      if (status === 'COMPLETE') {
+        break;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 3000);
+      });
+    }
+
+    // Post message in thread.
+    await postMessage(client, channel, threadTs, 'データの取り込みに成功しました。');
+  } catch (e: any) {
+    // Post error message in thread.
+    await postMessage(client, channel, threadTs, e.message);
+  } finally {
+    // Remove emoji of saluting face.
+    await client.reactions.remove({
+      name: 'saluting_face',
+      channel,
+      timestamp: ts,
+    });
+  }
 };
 
 // Open Reference Modal
@@ -276,8 +407,52 @@ const putReferences = async (messageId: string, references: RetrievedReference[]
   }));
 };
 
+// Start Ingestion Job
+const startIngestionJob = async (knowledgeBaseId: string, dataSourceId: string): Promise<string | undefined> => {
+  const { ingestionJob } = await bedrockAgent.send(new StartIngestionJobCommand({
+    knowledgeBaseId,
+    dataSourceId,
+  }));
+
+  return ingestionJob?.ingestionJobId;
+};
+
+// Get Ingestion Job Status
+const getIngestionJobStatus = async (knowledgeBaseId: string, dataSourceId: string, ingestionJobId: string): Promise<IngestionJobStatus | undefined> => {
+  const { ingestionJob } = await bedrockAgent.send(new GetIngestionJobCommand({
+    knowledgeBaseId,
+    dataSourceId,
+    ingestionJobId,
+  }));
+
+  return ingestionJob?.status;
+};
+
+// Put Files
+const putFiles = async (files: NonNullable<GenericMessageEvent['files']>): Promise<void> => {
+  await Promise.all(files.map(async ({ name, mimetype, user, url_private_download }) => {
+    if (name && mimetype && user && url_private_download) {
+      const response = await fetch(url_private_download, {
+        headers: {
+          Authorization: `Bearer ${slackBotToken}`,
+        },
+      });
+
+      // Body
+      const body = Buffer.from(await response.arrayBuffer());
+
+      await s3.send(new PutObjectCommand({
+        Bucket: dataSourceBucketName,
+        Key: `users/${user}/${name}`,
+        ContentType: mimetype,
+        Body: body,
+      }));
+    }
+  }));
+};
+
 // Post Message
-const postMessage = async (client: WebClient, channel: string, threadTs: string, text: string, references: RetrievedReference[]): Promise<string> => {
+const postMessage = async (client: WebClient, channel: string, threadTs: string, text: string, references: RetrievedReference[] = []): Promise<string> => {
   // Blocks
   const blocks: KnownBlock[] = [
     {

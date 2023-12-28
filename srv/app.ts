@@ -31,10 +31,12 @@ class SeedsBotStack extends Stack {
     super(scope, id, props);
 
     // Context Values
-    const [slackBotToken, slackSigningSecret, knowledgeBaseId, githubRepo] = [
+    const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, githubRepo] = [
       this.node.getContext('slackBotToken'),
       this.node.getContext('slackSigningSecret'),
       this.node.getContext('knowledgeBaseId'),
+      this.node.getContext('dataSourceId'),
+      this.node.getContext('dataSourceBucketName'),
       this.node.getContext('githubRepo'),
     ];
 
@@ -48,22 +50,37 @@ class SeedsBotStack extends Stack {
         SLACK_BOT_TOKEN: slackBotToken,
         SLACK_SIGNING_SECRET: slackSigningSecret,
         KNOWLEDGE_BASE_ID: knowledgeBaseId,
+        DATA_SOURCE_ID: dataSourceId,
+        DATA_SOURCE_BUCKET_NAME: dataSourceBucketName,
+        TZ: 'Asia/Tokyo',
       },
       initialPolicy: [
         new iam.PolicyStatement({
           actions: [
+            'bedrock:AssociateThirdPartyKnowledgeBase',
+            'bedrock:GetIngestionJob',
             'bedrock:InvokeModel',
             'bedrock:Retrieve',
             'bedrock:RetrieveAndGenerate',
+            'bedrock:StartIngestionJob',
           ],
           resources: [
             '*',
+          ],
+        }),
+        new iam.PolicyStatement({
+          actions: [
+            's3:PutObject',
+          ],
+          resources: [
+            `arn:aws:s3:::${dataSourceBucketName}/*`,
           ],
         }),
       ],
       bundling: {
         minify: true,
         nodeModules: [
+          '@aws-sdk/client-bedrock-agent',
           '@aws-sdk/client-bedrock-agent-runtime',
         ],
       },
