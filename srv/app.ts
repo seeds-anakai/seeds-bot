@@ -82,11 +82,14 @@ class SeedsBotStack extends Stack {
     // Session Table
     const sessionTable = new dynamodb.Table(this, 'SessionTable', {
       partitionKey: {
-        name: 'threadId',
+        name: 'channel',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'threadTs',
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      pointInTimeRecovery: true,
     });
 
     // Add environment variable for access Session Table.
@@ -94,6 +97,25 @@ class SeedsBotStack extends Stack {
 
     // Add permissions to access Session Table.
     sessionTable.grantReadWriteData(api);
+
+    // Reference Table
+    const referenceTable = new dynamodb.Table(this, 'ReferenceTable', {
+      partitionKey: {
+        name: 'messageId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'no',
+        type: dynamodb.AttributeType.NUMBER,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    });
+
+    // Add environment variable for access Reference Table.
+    api.addEnvironment('REFERENCE_TABLE_NAME', referenceTable.tableName);
+
+    // Add permissions to access Reference Table.
+    referenceTable.grantReadWriteData(api);
 
     // GitHub OpenID Connect Provider
     const githubOpenIdConnectProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(this, 'GitHubOpenIdConnectProvider', `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`);

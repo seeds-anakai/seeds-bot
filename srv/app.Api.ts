@@ -3,6 +3,7 @@ import {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommand,
   RetrieveAndGenerateType,
+  RetrievedReference,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
 // AWS SDK - DynamoDB
@@ -10,6 +11,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 
 // AWS SDK - DynamoDB - Document Client
 import {
+  BatchWriteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -19,19 +21,20 @@ import {
 import {
   App,
   AwsLambdaReceiver,
-  DividerBlock,
-  SectionBlock,
+  BlockElementAction,
+  KnownBlock,
 } from '@slack/bolt';
 
 // Slack - Web API
 import { WebClient } from '@slack/web-api';
 
 // Environment Variables
-const [slackBotToken, slackSigningSecret, sessionTableName, knowledgeBaseId, modelArn] = [
+const [slackBotToken, slackSigningSecret, knowledgeBaseId, sessionTableName, referenceTableName, modelArn] = [
   process.env.SLACK_BOT_TOKEN,
   process.env.SLACK_SIGNING_SECRET,
-  process.env.SESSION_TABLE_NAME,
   process.env.KNOWLEDGE_BASE_ID,
+  process.env.SESSION_TABLE_NAME,
+  process.env.REFERENCE_TABLE_NAME,
   'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
 ];
 
@@ -53,18 +56,20 @@ const receiver = new AwsLambdaReceiver({
 // Slack - App
 const app = new App({ token: slackBotToken, receiver });
 
-// Slack - App Mention Handler
+// Slack - App Mention Event Handler
 app.event('app_mention', async ({ client, event }) => {
-  await answer(
-    client,
-    event.channel,
-    event.ts,
-    event.thread_ts ?? event.ts,
-    normalize(event.text),
-  );
+  if (!event.subtype) {
+    await answer(
+      client,
+      event.channel,
+      event.ts,
+      event.thread_ts ?? event.ts,
+      normalize(event.text),
+    );
+  }
 });
 
-// Slack - Message Handler
+// Slack - Direct Message Handler
 app.message(async ({ client, event }) => {
   if (!event.subtype && event.text) {
     await answer(
@@ -81,48 +86,19 @@ app.message(async ({ client, event }) => {
 app.action('open_reference', async ({ client, body, ack }) => {
   await ack();
 
-  if (body.type === 'block_actions' && body.actions[0].type === 'button') {
-    // Reference
-    const { content, location } = JSON.parse(body.actions[0].value);
-
-    // Location URI
-    const uri = location?.s3Location?.uri?.split?.('/')?.pop?.() ?? '';
-
-    // Open reference modal.
-    await client.views.open({
-      trigger_id: body.trigger_id,
-      view: {
-        type: 'modal',
-        title: {
-          type: 'plain_text',
-          text: uri.length > 24 ? `${uri.substring(0, 23)}…` : uri,
-        },
-        blocks: [
-          {
-            type: 'header',
-            text: {
-              type: 'plain_text',
-              text: uri,
-            },
-          },
-          {
-            type: 'section',
-            text: {
-              type: 'plain_text',
-              text: content?.text ?? '',
-            },
-          },
-        ],
-      },
-    });
+  if (body.type === 'block_actions') {
+    await openReferenceModal(
+      client,
+      body.channel?.id ?? '',
+      body.message?.ts ?? '',
+      body.trigger_id,
+      body.actions,
+    );
   }
 });
 
 // Answer
 const answer = async (client: WebClient, channel: string, ts: string, threadTs: string, text: string): Promise<void> => {
-  // Thread ID
-  const threadId = `${channel}#${threadTs}`;
-
   // Add emoji of thinking face.
   await client.reactions.add({
     name: 'thinking_face',
@@ -132,7 +108,7 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
 
   // Retrieve and generate.
   const { sessionId, citations } = await bedrock.send(new RetrieveAndGenerateCommand({
-    sessionId: await getSessionId(threadId),
+    sessionId: await getSessionId(channel, threadTs),
     input: {
       text,
     },
@@ -145,80 +121,35 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
     },
   }));
 
-  // Answer Blocks
-  const blocks: [SectionBlock, DividerBlock, ...SectionBlock[]] = [
-    {
-      type: 'section',
-      text: {
-        type: 'plain_text',
-        text: '',
-      },
-    },
-    {
-      type: 'divider',
-    },
-  ];
+  if (!sessionId || !citations) {
+    return;
+  }
 
-  // Add answer blocks.
-  citations?.forEach?.(({ generatedResponsePart, retrievedReferences }) => {
-    Object.assign(blocks[0], {
-      text: {
-        type: 'plain_text',
-        text: `${blocks[0].text?.text}${generatedResponsePart?.textResponsePart?.text}`,
-      },
-    });
+  // References
+  const references = citations.flatMap(({ retrievedReferences }) => retrievedReferences ?? []);
 
-    // Add references.
-    retrievedReferences?.forEach?.(({ content, location }) => {
-      // Reference No
-      const referenceNo = blocks.length - 1;
+  // Answer
+  const answer = citations.reduce((answer, { generatedResponsePart, retrievedReferences }) => {
+    // Add response text.
+    answer += generatedResponsePart?.textResponsePart?.text;
 
-      Object.assign(blocks[0], {
-        text: {
-          type: 'plain_text',
-          text: `${blocks[0].text?.text}[${referenceNo}] `,
-        },
-      });
+    // Add reference numbers.
+    answer += retrievedReferences?.map?.((reference) => {
+      return `[${references.indexOf(reference) + 1}] `;
+    })?.join?.('');
 
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'plain_text',
-          text: `[${referenceNo}] ${location?.s3Location?.uri?.split?.('/')?.pop?.()}`,
-        },
-        accessory: {
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: '詳細を見る',
-          },
-          value: JSON.stringify({
-            content: {
-              text: content?.text?.substring?.(0, 1932 - JSON.stringify(location?.s3Location?.uri).length - (JSON.stringify(content.text).length - content.text.length)),
-            },
-            location,
-          }),
-          action_id: 'open_reference',
-        },
-      });
-    });
-  });
+    // Answer
+    return answer;
+  }, '');
 
   // Post answer in thread.
-  await client.chat.postMessage({
-    channel,
-    blocks,
-    thread_ts: threadTs,
-  });
+  const messageId = await postMessage(client, channel, threadTs, answer, references);
 
-  // Save session id.
-  await dynamodb.send(new PutCommand({
-    TableName: sessionTableName,
-    Item: {
-      threadId,
-      sessionId,
-    },
-  }));
+  // Put session id.
+  await putSessionId(channel, threadTs, sessionId);
+
+  // Put references.
+  await putReferences(messageId, references);
 
   // Remove emoji of thinking face.
   await client.reactions.remove({
@@ -228,21 +159,185 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
   });
 };
 
+// Open Reference Modal
+const openReferenceModal = async (client: WebClient, channel: string, ts: string, triggerId: string, actions: BlockElementAction[]): Promise<void> => {
+  await Promise.all(actions.flatMap((action) => action.type === 'button' ? [action] : []).map(async ({ value }) => {
+    // Message ID
+    const messageId = `${channel}-${ts}`;
+
+    // Get reference.
+    const reference = isFinite(Number(value))
+      ? await getReference(messageId, Number(value))
+      : JSON.parse(value) as RetrievedReference;
+
+    if (!reference) {
+      return;
+    }
+
+    if (!reference.location?.s3Location?.uri) {
+      return;
+    }
+
+    if (!reference.content?.text) {
+      return;
+    }
+
+    // Content Text and S3 Location URI
+    const { content: { text }, location: { s3Location: { uri } } } = reference;
+
+    // Filename
+    const filename = getFilename(uri);
+
+    // Open reference modal.
+    await client.views.open({
+      trigger_id: triggerId,
+      view: {
+        type: 'modal',
+        title: {
+          type: 'plain_text',
+          text: omit(filename, 24),
+        },
+        blocks: [
+          {
+            type: 'header',
+            text: {
+              type: 'plain_text',
+              text: filename,
+            },
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'plain_text',
+              text: omit(text, 3000),
+            },
+          },
+        ],
+      },
+    });
+  }));
+};
+
+// Get Session ID
+const getSessionId = async (channel: string, threadTs: string): Promise<string | undefined> => {
+  const { Item: item } = await dynamodb.send(new GetCommand({
+    TableName: sessionTableName,
+    Key: {
+      channel,
+      threadTs,
+    },
+  }));
+
+  return item?.sessionId;
+};
+
+// Put Session ID
+const putSessionId = async (channel: string, threadTs: string, sessionId: string): Promise<void> => {
+  await dynamodb.send(new PutCommand({
+    TableName: sessionTableName,
+    Item: {
+      channel,
+      threadTs,
+      sessionId,
+    },
+  }));
+};
+
+// Get Reference
+const getReference = async (messageId: string, no: number): Promise<RetrievedReference | undefined> => {
+  const { Item: item } = await dynamodb.send(new GetCommand({
+    TableName: referenceTableName,
+    Key: {
+      messageId,
+      no,
+    },
+  }));
+
+  return item?.reference;
+};
+
+// Put References
+const putReferences = async (messageId: string, references: RetrievedReference[]): Promise<void> => {
+  await dynamodb.send(new BatchWriteCommand({
+    RequestItems: {
+      [referenceTableName]: references.map((reference, i) => ({
+        PutRequest: {
+          Item: {
+            messageId,
+            no: i + 1,
+            reference,
+          },
+        },
+      })),
+    },
+  }));
+};
+
+// Post Message
+const postMessage = async (client: WebClient, channel: string, threadTs: string, text: string, references: RetrievedReference[]): Promise<string> => {
+  // Blocks
+  const blocks: KnownBlock[] = [
+    {
+      type: 'section',
+      text: {
+        type: 'plain_text',
+        text,
+      },
+    },
+  ];
+
+  // Add divider block.
+  if (references.length) {
+    blocks.push({
+      type: 'divider',
+    });
+  }
+
+  // Add reference blocks.
+  references.map(({ location }, i) => `[${i + 1}] ${getFilename(location?.s3Location?.uri ?? '')}`).forEach((text, i) => {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'plain_text',
+        text,
+      },
+      accessory: {
+        type: 'button',
+        action_id: 'open_reference',
+        text: {
+          type: 'plain_text',
+          text: '詳細を見る',
+        },
+        value: String(i + 1),
+      },
+    });
+  });
+
+  // Post message.
+  const { ts } = await client.chat.postMessage({
+    channel,
+    text,
+    blocks,
+    thread_ts: threadTs,
+  });
+
+  // Message ID
+  return `${channel}-${ts}`;
+};
+
 // Normalize
 const normalize = (text: string): string => {
   return text.replace(/<[!#@].*?>\s*/g, '');
 };
 
-// Get Session ID
-const getSessionId = async (threadId: string): Promise<string | undefined> => {
-  const { Item: item } = await dynamodb.send(new GetCommand({
-    TableName: sessionTableName,
-    Key: {
-      threadId,
-    },
-  }));
+// Omit
+const omit = (text: string, length: number, ellipsis: string = '…'): string => {
+  return text.length > length ? text.substring(0, length - 1) + ellipsis : text;
+};
 
-  return item?.sessionId;
+// Get Filename
+const getFilename = (uri: string): string => {
+  return uri.split('/').pop() ?? '';
 };
 
 // Lambda Handler
