@@ -364,13 +364,15 @@ const getSessionId = async (channel: string, threadTs: string): Promise<string |
 
 // Put Session ID
 const putSessionId = async (channel: string, threadTs: string, sessionId: string): Promise<void> => {
+  const ttl = Math.floor(Date.now() / 1000) + 60 * 60 * 24;
+
   await dynamodb.send(new PutCommand({
     TableName: sessionTableName,
     Item: {
       channel,
       threadTs,
       sessionId,
-      ttl: Math.floor(Date.now() / 1000) + 86400,
+      ttl,
     },
   }));
 };
