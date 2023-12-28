@@ -90,6 +90,7 @@ class SeedsBotStack extends Stack {
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'ttl',
     });
 
     // Add environment variable for access Session Table.

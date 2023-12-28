@@ -239,6 +239,7 @@ const putSessionId = async (channel: string, threadTs: string, sessionId: string
       channel,
       threadTs,
       sessionId,
+      ttl: Math.floor(Date.now() / 1000) + 86400,
     },
   }));
 };
