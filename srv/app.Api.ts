@@ -316,8 +316,8 @@ const openReferenceModal = async (client: WebClient, channel: string, ts: string
     // Content Text and S3 Location URI
     const { content: { text }, location: { s3Location: { uri } } } = reference;
 
-    // Filename
-    const filename = getFilename(uri);
+    // File Name
+    const fileName = getFileNameFromUri(uri);
 
     // Open reference modal.
     await client.views.open({
@@ -326,14 +326,14 @@ const openReferenceModal = async (client: WebClient, channel: string, ts: string
         type: 'modal',
         title: {
           type: 'plain_text',
-          text: omit(filename, 24),
+          text: omit(fileName, 24),
         },
         blocks: [
           {
             type: 'header',
             text: {
               type: 'plain_text',
-              text: filename,
+              text: fileName,
             },
           },
           {
@@ -392,7 +392,7 @@ const getReference = async (messageId: string, no: number): Promise<RetrievedRef
 
 // Put References
 const putReferences = async (messageId: string, references: RetrievedReference[]): Promise<void> => {
-  await Promise.all([...Array(Math.ceil(references.length / 25)).keys()].map((i) => references.slice(i * 25, (i + 1) * 25)).map((references, i) => {
+  await Promise.all(splitArrayEqually(references, 25).map((references, i) => {
     return dynamodb.send(new BatchWriteCommand({
       RequestItems: {
         [referenceTableName]: references.map((reference, j) => ({
@@ -474,7 +474,7 @@ const postMessage = async (client: WebClient, channel: string, threadTs: string,
   }
 
   // Add reference blocks.
-  references.map(({ location }, i) => `[${i + 1}] ${getFilename(location?.s3Location?.uri ?? '')}`).forEach((text, i) => {
+  references.map(({ location }, i) => `[${i + 1}] ${getFileNameFromUri(location?.s3Location?.uri ?? '')}`).forEach((text, i) => {
     blocks.push({
       type: 'section',
       text: {
@@ -515,9 +515,16 @@ const omit = (text: string, length: number, ellipsis: string = '…'): string =>
   return text.length > length ? text.substring(0, length - 1) + ellipsis : text;
 };
 
-// Get Filename
-const getFilename = (uri: string): string => {
-  return uri.split('/').pop() ?? '';
+// Split Array Equally
+const splitArrayEqually = <T>(array: T[], length: number): T[][] => {
+  return [...Array(Math.ceil(array.length / length))].map((_, i) => {
+    return array.slice(i * length, (i + 1) * length);
+  });
+};
+
+// Get File Name from URI
+const getFileNameFromUri = (uri: string): string => {
+  return /.+\/(.+?)([\?#].*)?$/.exec(uri)?.[1] ?? '';
 };
 
 // Lambda Handler
