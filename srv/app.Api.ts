@@ -39,15 +39,19 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   AllMiddlewareArgs,
   App,
-  AppMentionEvent,
   AwsLambdaReceiver,
   BlockElementAction,
-  GenericMessageEvent,
   KnownBlock,
 } from '@slack/bolt';
 
 // Slack - Web API
 import { WebClient } from '@slack/web-api';
+
+// Slack - Types
+import {
+  AppMentionEventWithFiles,
+  File,
+} from '@/types/slack';
 
 // Environment Variables
 const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, modelArn, sessionTableName, referenceTableName] = [
@@ -62,24 +66,16 @@ const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSou
 ];
 
 // AWS SDK - Bedrock Agent - Client
-const bedrockAgent = new BedrockAgentClient({
-  apiVersion: '2023-06-05',
-});
+const bedrockAgent = new BedrockAgentClient();
 
 // AWS SDK - Bedrock Agent Runtime - Client
-const bedrockAgentRuntime = new BedrockAgentRuntimeClient({
-  apiVersion: '2023-07-26',
-});
+const bedrockAgentRuntime = new BedrockAgentRuntimeClient();
 
 // AWS SDK - DynamoDB - Client
-const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({
-  apiVersion: '2012-08-10',
-}));
+const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient());
 
 // AWS SDK - S3 - Client
-const s3 = new S3Client({
-  apiVersion: '2006-03-01',
-});
+const s3 = new S3Client();
 
 // Slack - AWS Lambda Receiver
 const receiver = new AwsLambdaReceiver({
@@ -93,7 +89,7 @@ const slack = new App({
 });
 
 // Slack - App Mention Event Handler
-slack.event('app_mention', async ({ client, event }: { event: AppMentionEvent & Pick<GenericMessageEvent, 'files'> } & AllMiddlewareArgs) => {
+slack.event('app_mention', async ({ client, event }: AllMiddlewareArgs & { event: AppMentionEventWithFiles }) => {
   if (!event.subtype) {
     if (!event.files) {
       await answer(
@@ -240,7 +236,7 @@ const answer = async (client: WebClient, channel: string, ts: string, threadTs: 
 };
 
 // Upload Files and Sync
-const uploadFilesAndSync = async (client: WebClient, channel: string, ts: string, threadTs: string, files: NonNullable<GenericMessageEvent['files']>): Promise<void> => {
+const uploadFilesAndSync = async (client: WebClient, channel: string, ts: string, threadTs: string, files: File[]): Promise<void> => {
   // Add emoji of saluting face.
   await client.reactions.add({
     name: 'saluting_face',
@@ -328,14 +324,14 @@ const openReferenceModal = async (client: WebClient, channel: string, ts: string
     // Content Text and S3 Location URI
     const { content: { text }, location: { s3Location: { uri } } } = reference;
 
-    // Signed URL
+    // File Name
+    const fileName = getFileNameFromUri(uri);
+
+    // URL
     const url = await getSignedUrl(s3, new GetObjectCommand({
       Bucket: dataSourceBucketName,
       Key: getPathNameFromUri(uri),
     }));
-
-    // File Name
-    const fileName = getFileNameFromUri(uri);
 
     // Open reference modal.
     await client.views.open({
@@ -458,10 +454,10 @@ const getIngestionJobStatus = async (knowledgeBaseId: string, dataSourceId: stri
 };
 
 // Put Files
-const putFiles = async (files: NonNullable<GenericMessageEvent['files']>): Promise<void> => {
-  await Promise.all(files.map(async ({ name, mimetype, user, url_private_download }) => {
-    if (name && mimetype && user && url_private_download) {
-      const response = await fetch(url_private_download, {
+const putFiles = async (files: File[]): Promise<void> => {
+  await Promise.all(files.map(async ({ name, mimetype, user, url_private_download: urlPrivateDownload }) => {
+    if (name && mimetype && user && urlPrivateDownload) {
+      const response = await fetch(urlPrivateDownload, {
         headers: {
           Authorization: `Bearer ${slackBotToken}`,
         },
@@ -493,7 +489,7 @@ const postMessage = async (client: WebClient, channel: string, threadTs: string,
     },
   ];
 
-  // Add divider block.
+  // Add divider block if references exists.
   if (references.length) {
     blocks.push({
       type: 'divider',
@@ -551,7 +547,7 @@ const splitArrayEqually = <T>(array: T[], length: number): T[][] => {
 
 // Get File Name from URI
 const getFileNameFromUri = (uri: string): string => {
-  return /.+\/(.+?)([\?#].*)?$/.exec(uri)?.[1] ?? '';
+  return uri.split('/').slice(-1)[0] ?? '';
 };
 
 // Get Path Name from URI

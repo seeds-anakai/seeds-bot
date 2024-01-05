@@ -1,4 +1,10 @@
 {
+  "ts-node": {
+    "preferTsExts": true,
+    "require": [
+      "tsconfig-paths/register"
+    ]
+  },
   "compilerOptions": {
     "target": "es2018",
     "lib": [
@@ -7,6 +13,12 @@
       "es2017.string"
     ],
     "module": "commonjs",
+    "baseUrl": "srv",
+    "paths": {
+      "@/*": [
+        "*"
+      ]
+    },
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true
