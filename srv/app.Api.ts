@@ -27,9 +27,13 @@ import {
 
 // AWS SDK - S3
 import {
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+
+// AWS SDK - S3 Request Presigner
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Slack - Bolt
 import {
@@ -154,6 +158,11 @@ app.action('open_reference', async ({ client, body, ack }) => {
       body.actions,
     );
   }
+});
+
+// Slack - Open Reference URI Action Handler
+app.action('open_reference_uri', async ({ ack }) => {
+  await ack();
 });
 
 // Answer
@@ -316,6 +325,12 @@ const openReferenceModal = async (client: WebClient, channel: string, ts: string
     // Content Text and S3 Location URI
     const { content: { text }, location: { s3Location: { uri } } } = reference;
 
+    // Signed URL
+    const url = await getSignedUrl(s3, new GetObjectCommand({
+      Bucket: dataSourceBucketName,
+      Key: getPathNameFromUri(uri),
+    }));
+
     // File Name
     const fileName = getFileNameFromUri(uri);
 
@@ -330,10 +345,19 @@ const openReferenceModal = async (client: WebClient, channel: string, ts: string
         },
         blocks: [
           {
-            type: 'header',
+            type: 'section',
             text: {
-              type: 'plain_text',
-              text: fileName,
+              type: 'mrkdwn',
+              text: omit(`*${fileName}*`, 3000),
+            },
+            accessory: {
+              type: 'button',
+              action_id: 'open_reference_uri',
+              text: {
+                type: 'plain_text',
+                text: '開く',
+              },
+              url,
             },
           },
           {
@@ -525,6 +549,11 @@ const splitArrayEqually = <T>(array: T[], length: number): T[][] => {
 // Get File Name from URI
 const getFileNameFromUri = (uri: string): string => {
   return /.+\/(.+?)([\?#].*)?$/.exec(uri)?.[1] ?? '';
+};
+
+// Get Path Name from URI
+const getPathNameFromUri = (uri: string): string => {
+  return uri.split('/').slice(3).join('/');
 };
 
 // Lambda Handler

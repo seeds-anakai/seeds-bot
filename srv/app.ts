@@ -70,6 +70,7 @@ class SeedsBotStack extends Stack {
         }),
         new iam.PolicyStatement({
           actions: [
+            's3:GetObject',
             's3:PutObject',
           ],
           resources: [
