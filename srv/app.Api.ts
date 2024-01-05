@@ -54,7 +54,7 @@ const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSou
   process.env.DATA_SOURCE_BUCKET_NAME,
   process.env.SESSION_TABLE_NAME,
   process.env.REFERENCE_TABLE_NAME,
-  'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
+  'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2:1',
 ];
 
 // AWS SDK - Bedrock Agent - Client
