@@ -30,5 +30,7 @@ jobs:
             -c knowledgeBaseId=${{ secrets.KNOWLEDGE_BASE_ID }} \
             -c dataSourceId=${{ secrets.DATA_SOURCE_ID }} \
             -c dataSourceBucketName=${{ secrets.DATA_SOURCE_BUCKET_NAME }} \
-            -c githubRepo=${{ github.repository }} \
+            -c modelArn=${{ secrets.MODEL_ARN }} \
+            -c githubRepository=${{ github.repository }} \
+            -c githubRef=${{ github.ref }} \
             --require-approval never

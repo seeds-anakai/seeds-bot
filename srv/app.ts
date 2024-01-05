@@ -31,13 +31,15 @@ class SeedsBotStack extends Stack {
     super(scope, id, props);
 
     // Context Values
-    const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, githubRepo] = [
+    const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, modelArn, githubRepository, githubRef] = [
       this.node.getContext('slackBotToken'),
       this.node.getContext('slackSigningSecret'),
       this.node.getContext('knowledgeBaseId'),
       this.node.getContext('dataSourceId'),
       this.node.getContext('dataSourceBucketName'),
-      this.node.getContext('githubRepo'),
+      this.node.getContext('modelArn'),
+      this.node.tryGetContext('githubRepository'),
+      this.node.tryGetContext('githubRef'),
     ];
 
     // Api
@@ -52,6 +54,7 @@ class SeedsBotStack extends Stack {
         KNOWLEDGE_BASE_ID: knowledgeBaseId,
         DATA_SOURCE_ID: dataSourceId,
         DATA_SOURCE_BUCKET_NAME: dataSourceBucketName,
+        MODEL_ARN: modelArn,
         TZ: 'Asia/Tokyo',
       },
       initialPolicy: [
@@ -136,34 +139,37 @@ class SeedsBotStack extends Stack {
     // Add permissions to access Reference Table.
     referenceTable.grantReadWriteData(api);
 
-    // GitHub OpenID Connect Provider
-    const githubOpenIdConnectProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(this, 'GitHubOpenIdConnectProvider', `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`);
+    // If the GitHub repository name and ref of the branch exists, create a role to cdk deploy from GitHub.
+    if (githubRepository && githubRef) {
+      // GitHub OpenID Connect Provider
+      const githubOpenIdConnectProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(this, 'GitHubOpenIdConnectProvider', `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`);
 
-    // GitHub Deploy Role
-    new iam.Role(this, 'GitHubDeployRole', {
-      assumedBy: new iam.WebIdentityPrincipal(githubOpenIdConnectProvider.openIdConnectProviderArn, {
-        StringEquals: {
-          [`${githubOpenIdConnectProvider.openIdConnectProviderIssuer}:aud`]: 'sts.amazonaws.com',
-        },
-        StringLike: {
-          [`${githubOpenIdConnectProvider.openIdConnectProviderIssuer}:sub`]: `repo:${githubRepo}:*`,
-        },
-      }),
-      inlinePolicies: {
-        GitHubDeployRolePolicy: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              actions: [
-                'sts:AssumeRole',
-              ],
-              resources: [
-                `arn:aws:iam::${this.account}:role/cdk-${this.synthesizer.bootstrapQualifier}-*-role-${this.account}-${this.region}`,
-              ],
-            }),
-          ],
+      // GitHub Deploy Role
+      new iam.Role(this, 'GitHubDeployRole', {
+        assumedBy: new iam.WebIdentityPrincipal(githubOpenIdConnectProvider.openIdConnectProviderArn, {
+          StringEquals: {
+            [`${githubOpenIdConnectProvider.openIdConnectProviderIssuer}:aud`]: 'sts.amazonaws.com',
+          },
+          StringLike: {
+            [`${githubOpenIdConnectProvider.openIdConnectProviderIssuer}:sub`]: `repo:${githubRepository}:ref:${githubRef}`,
+          },
         }),
-      },
-    });
+        inlinePolicies: {
+          GitHubDeployRoleDefaultPolicy: new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                actions: [
+                  'sts:AssumeRole',
+                ],
+                resources: [
+                  `arn:aws:iam::${this.account}:role/cdk-${this.synthesizer.bootstrapQualifier}-*-role-${this.account}-*`,
+                ],
+              }),
+            ],
+          }),
+        },
+      });
+    }
   }
 }
 

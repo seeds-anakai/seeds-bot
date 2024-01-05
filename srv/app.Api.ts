@@ -50,15 +50,15 @@ import {
 import { WebClient } from '@slack/web-api';
 
 // Environment Variables
-const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, sessionTableName, referenceTableName, modelArn] = [
+const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, modelArn, sessionTableName, referenceTableName] = [
   process.env.SLACK_BOT_TOKEN,
   process.env.SLACK_SIGNING_SECRET,
   process.env.KNOWLEDGE_BASE_ID,
   process.env.DATA_SOURCE_ID,
   process.env.DATA_SOURCE_BUCKET_NAME,
+  process.env.MODEL_ARN,
   process.env.SESSION_TABLE_NAME,
   process.env.REFERENCE_TABLE_NAME,
-  'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2:1',
 ];
 
 // AWS SDK - Bedrock Agent - Client
@@ -87,10 +87,13 @@ const receiver = new AwsLambdaReceiver({
 });
 
 // Slack - App
-const app = new App({ token: slackBotToken, receiver });
+const slack = new App({
+  token: slackBotToken,
+  receiver,
+});
 
 // Slack - App Mention Event Handler
-app.event('app_mention', async ({ client, event }: { event: AppMentionEvent & Pick<GenericMessageEvent, 'files'> } & AllMiddlewareArgs) => {
+slack.event('app_mention', async ({ client, event }: { event: AppMentionEvent & Pick<GenericMessageEvent, 'files'> } & AllMiddlewareArgs) => {
   if (!event.subtype) {
     if (!event.files) {
       await answer(
@@ -113,7 +116,7 @@ app.event('app_mention', async ({ client, event }: { event: AppMentionEvent & Pi
 });
 
 // Slack - Direct Message Handler
-app.message(async ({ client, event }) => {
+slack.message(async ({ client, event }) => {
   if (!event.subtype) {
     if (!event.files) {
       await answer(
@@ -146,7 +149,7 @@ app.message(async ({ client, event }) => {
 });
 
 // Slack - Open Reference Action Handler
-app.action('open_reference', async ({ client, body, ack }) => {
+slack.action('open_reference', async ({ client, body, ack }) => {
   await ack();
 
   if (body.type === 'block_actions') {
@@ -160,8 +163,8 @@ app.action('open_reference', async ({ client, body, ack }) => {
   }
 });
 
-// Slack - Open Reference URI Action Handler
-app.action('open_reference_uri', async ({ ack }) => {
+// Slack - Open Reference URL Action Handler
+slack.action('open_reference_url', async ({ ack }) => {
   await ack();
 });
 
@@ -352,7 +355,7 @@ const openReferenceModal = async (client: WebClient, channel: string, ts: string
             },
             accessory: {
               type: 'button',
-              action_id: 'open_reference_uri',
+              action_id: 'open_reference_url',
               text: {
                 type: 'plain_text',
                 text: '開く',
