@@ -5,6 +5,8 @@ on:
       - main
 concurrency:
   group: ${{ github.ref }}
+env:
+  AWS_REGION: ap-northeast-1
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -15,8 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -31,6 +33,6 @@ jobs:
             -c dataSourceId=${{ secrets.DATA_SOURCE_ID }} \
             -c dataSourceBucketName=${{ secrets.DATA_SOURCE_BUCKET_NAME }} \
             -c modelArn=${{ secrets.MODEL_ARN }} \
-            -c githubRepository=${{ github.repository }} \
-            -c githubRef=${{ github.ref }} \
-            --require-approval never
+            -c githubRepo=${{ github.repository }} \
+            --require-approval never \
+            --all

@@ -31,15 +31,14 @@ class SeedsBotStack extends Stack {
     super(scope, id, props);
 
     // Context Values
-    const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, modelArn, githubRepository, githubRef] = [
+    const [slackBotToken, slackSigningSecret, knowledgeBaseId, dataSourceId, dataSourceBucketName, modelArn, githubRepo] = [
       this.node.getContext('slackBotToken'),
       this.node.getContext('slackSigningSecret'),
       this.node.getContext('knowledgeBaseId'),
       this.node.getContext('dataSourceId'),
       this.node.getContext('dataSourceBucketName'),
       this.node.getContext('modelArn'),
-      this.node.tryGetContext('githubRepository'),
-      this.node.tryGetContext('githubRef'),
+      this.node.tryGetContext('githubRepo'),
     ];
 
     // Api
@@ -139,8 +138,8 @@ class SeedsBotStack extends Stack {
     // Add permissions to access Reference Table.
     referenceTable.grantReadWriteData(api);
 
-    // If the GitHub repository name and ref of the branch exists, create a role to cdk deploy from GitHub.
-    if (githubRepository && githubRef) {
+    // If the GitHub repository name exists, create a role to cdk deploy from GitHub.
+    if (githubRepo) {
       // GitHub OpenID Connect Provider
       const githubOpenIdConnectProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(this, 'GitHubOpenIdConnectProvider', `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`);
 
@@ -151,7 +150,7 @@ class SeedsBotStack extends Stack {
             [`${githubOpenIdConnectProvider.openIdConnectProviderIssuer}:aud`]: 'sts.amazonaws.com',
           },
           StringLike: {
-            [`${githubOpenIdConnectProvider.openIdConnectProviderIssuer}:sub`]: `repo:${githubRepository}:ref:${githubRef}`,
+            [`${githubOpenIdConnectProvider.openIdConnectProviderIssuer}:sub`]: `repo:${githubRepo}:*`,
           },
         }),
         inlinePolicies: {
