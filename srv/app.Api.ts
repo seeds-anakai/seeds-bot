@@ -44,13 +44,11 @@ import {
   KnownBlock,
 } from '@slack/bolt';
 
-// Slack - Web API
-import { WebClient } from '@slack/web-api';
-
 // Slack - Types
 import {
   AppMentionEventWithFiles,
   File,
+  WebClient,
 } from '@/types/slack';
 
 // Environment Variables
