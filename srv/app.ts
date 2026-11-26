@@ -61,7 +61,6 @@ class SeedsBotStack extends Stack {
           actions: [
             'bedrock:AssociateThirdPartyKnowledgeBase',
             'bedrock:GetIngestionJob',
-            'bedrock:InvokeModel',
             'bedrock:Retrieve',
             'bedrock:RetrieveAndGenerate',
             'bedrock:StartIngestionJob',
@@ -69,6 +68,18 @@ class SeedsBotStack extends Stack {
           resources: [
             '*',
           ],
+        }),
+        new iam.PolicyStatement({
+          actions: ['bedrock:GetInferenceProfile', 'bedrock:InvokeModel'],
+          resources: [
+            `arn:${this.partition}:bedrock:${this.region}:${this.account}:inference-profile/us.amazon.nova-2-lite-v1:0`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          actions: ['bedrock:InvokeModel'],
+          resources: ['us-east-1', 'us-east-2', 'us-west-2'].map(region =>
+            `arn:${this.partition}:bedrock:${region}::foundation-model/amazon.nova-2-lite-v1:0`,
+          ),
         }),
         new iam.PolicyStatement({
           actions: [
